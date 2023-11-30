@@ -24,6 +24,11 @@ pytorch 1.9.0
 torchvision 0.10.0
 prettytable
 easydict
+ftfy
+regexs
+tensorboard
+packaging
+tqdm
 ```
 
 ### Prepare Datasets

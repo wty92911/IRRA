@@ -65,8 +65,8 @@ def compute_itc(image_features, text_features, logit_scale):
     logits_per_text = logits_per_image.t()
 
     loss_i = F.cross_entropy(logits_per_image, labels)
-    loss_t =F.cross_entropy(logits_per_text, labels)
-    loss = (loss_i +  loss_t)/2
+    loss_t = F.cross_entropy(logits_per_text, labels)
+    loss = (loss_i + loss_t) / 2
 
     return loss
 
