@@ -102,10 +102,10 @@ class IRRA(nn.Module):
 
         if 'itc' in self.current_task:
             ret.update({'itc_loss':objectives.compute_itc(i_feats, t_feats, logit_scale)})
-        
         if 'sdm' in self.current_task:
             ret.update({'sdm_loss':objectives.compute_sdm(i_feats, t_feats, batch['pids'], logit_scale)})
-
+        if 'ssdm' in self.current_task:
+             ret.update({'ssdm_loss':objectives.compute_ssdm(i_feats, t_feats, batch['pids'], logit_scale)})
         if 'cmpm' in self.current_task:
             ret.update({'cmpm_loss':objectives.compute_cmpm(i_feats, t_feats, batch['pids'])})
         
@@ -129,7 +129,7 @@ class IRRA(nn.Module):
 
             x = self.cross_former(mlm_feats, image_feats, image_feats)
 
-            x = self.mlm_head(x)  # [batch_size, text_len, num_colors]
+            x = self.mlm_head(x)  # [batch_size, text_len, num_class]
 
             scores = x.float().reshape(-1, self.args.vocab_size)
             mlm_labels = batch['mlm_labels'].reshape(-1)

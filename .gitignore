@@ -1,0 +1,5 @@
+*/__pycache__/
+datasets/CUHK-PEDES/
+datasets/RSTPReid/
+nohup.out
+logs/

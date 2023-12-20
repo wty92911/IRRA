@@ -48,17 +48,36 @@ class CUHKPEDES(BaseDataset):
             self.logger.info("=> CUHK-PEDES Images and Captions are loaded")
             self.show_dataset_info()
 
-
+    def _pre_split_anno(self, annos):
+        '''
+        Add preprocessing to cope with changes in the data set
+        Divide the data set into 
+        training set, validation set, test set
+        with id in range(11003, 1000, 1000)
+        '''
+        for anno in annos:
+            id = anno['id']
+            if id <= 11003:
+                anno['split'] = 'train'
+            elif id <= 12003:
+                anno['split'] = 'test'
+            else:
+                anno['split'] = 'validate'
+        
     def _split_anno(self, anno_path: str):
         train_annos, test_annos, val_annos = [], [], []
         annos = read_json(anno_path)
+        self._pre_split_anno(annos)
         for anno in annos:
-            if anno['split'] == 'train':
-                train_annos.append(anno)
-            elif anno['split'] == 'test':
-                test_annos.append(anno)
+            if 'split' in anno:
+                if anno['split'] == 'train':
+                    train_annos.append(anno)
+                elif anno['split'] == 'test':
+                    test_annos.append(anno)
+                else:
+                    val_annos.append(anno)
             else:
-                val_annos.append(anno)
+                pass
         return train_annos, test_annos, val_annos
 
   

@@ -25,6 +25,7 @@ def do_train(start_epoch, args, model, train_loader, evaluator, optimizer,
     meters = {
         "loss": AverageMeter(),
         "sdm_loss": AverageMeter(),
+        "ssdm_loss": AverageMeter(),
         "itc_loss": AverageMeter(),
         "id_loss": AverageMeter(),
         "mlm_loss": AverageMeter(),
@@ -53,6 +54,7 @@ def do_train(start_epoch, args, model, train_loader, evaluator, optimizer,
             batch_size = batch['images'].shape[0]
             meters['loss'].update(total_loss.item(), batch_size)
             meters['sdm_loss'].update(ret.get('sdm_loss', 0), batch_size)
+            meters['ssdm_loss'].update(ret.get('ssdm_loss', 0), batch_size)
             meters['itc_loss'].update(ret.get('itc_loss', 0), batch_size)
             meters['id_loss'].update(ret.get('id_loss', 0), batch_size)
             meters['mlm_loss'].update(ret.get('mlm_loss', 0), batch_size)

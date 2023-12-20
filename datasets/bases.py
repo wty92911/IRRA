@@ -9,7 +9,8 @@ from prettytable import PrettyTable
 import random
 import regex as re
 import copy
-
+import spacy
+import numpy as np
 
 class BaseDataset(object):
     """
@@ -142,7 +143,7 @@ class ImageTextMLMDataset(Dataset):
         self.truncate = truncate
 
         self.tokenizer = SimpleTokenizer()
-
+        self.nlp_extractor = spacy.load("en_core_web_sm")
     def __len__(self):
         return len(self.dataset)
 
@@ -154,57 +155,83 @@ class ImageTextMLMDataset(Dataset):
         
         caption_tokens = tokenize(caption, tokenizer=self.tokenizer, text_length=self.text_length, truncate=self.truncate)
 
-        mlm_tokens, mlm_labels = self._build_random_masked_tokens_and_labels(caption_tokens.cpu().numpy())
-
+        mlm_tokens, mlm_labels = self._build_random_masked_tokens_and_labels(caption_tokens.cpu().numpy(), caption)
         ret = {
             'pids': pid,
             'image_ids': image_id,
             'images': img,
-            'caption_ids': caption_tokens,
+            'caption_ids': caption_tokens, #和原文bug保持一致 https://github.com/anosorae/IRRA/issues/13
             'mlm_ids': mlm_tokens,
             'mlm_labels': mlm_labels
         }
 
         return ret
-
-    def _build_random_masked_tokens_and_labels(self, tokens):
+    def _build_random_masked_tokens_and_labels(self, tokens, caption, mask_level='token'):
         """
         Masking some random tokens for Language Model task with probabilities as in the original BERT paper.
+        UPD: Masking in a phrase-level
         :param tokens: list of int, tokenized sentence.
         :return: (list of int, list of int), masked tokens and related labels for MLM prediction
         """
+
         mask = self.tokenizer.encoder["<|mask|>"]
         token_range = list(range(1, len(self.tokenizer.encoder)-3)) # 1 ~ 49405
-        
-        labels = []
-        for i, token in enumerate(tokens):
-            if 0 < token < 49405:
+        if mask_level == 'token':
+            labels = []
+            for i, token in enumerate(tokens):
+                if 0 < token < 49405:
+                    prob = random.random()
+                    # mask token with 15% probability
+                    if prob < 0.15:
+                        prob /= 0.15
+
+                        # 80% randomly change token to mask token
+                        if prob < 0.8:
+                            tokens[i] = mask
+
+                        # 10% randomly change token to random token
+                        elif prob < 0.9:
+                            tokens[i] = random.choice(token_range)
+
+                        # -> rest 10% randomly keep current token
+
+                        # append current token to output (we will predict these later)
+                        # labels[i] = token
+                        labels.append(token)
+                    else:
+                        # no masking token (will be ignored by loss function later)
+                        labels.append(0)
+                        # labels[i] = 0
+                else:
+                    # labels[i] = 0
+                    labels.append(0)
+        elif mask_level == 'phrase':
+            doc = self.nlp_extractor(caption)
+            phrases = [chunk.text for chunk in doc.noun_chunks] #noun
+            labels = np.zeros_like(token)
+            for phrase in phrases:
+                # mask phrase with 15% probability
                 prob = random.random()
-                # mask token with 15% probability
                 if prob < 0.15:
                     prob /= 0.15
+                    phrase_tokens = np.array(self.tokenizer.encode(phrase))
+                    #在tokens中找到连续的一部分是phrase_tokens mask
+                    for i, token in enumerate(tokens):
+                        if np.all(tokens[i: i + len(phrase_tokens)] == phrase_tokens):
+                            
+                            labels[i: i + len(phrase_tokens)] = phrase_tokens
+                            prob2 = random.random()
+                            if prob2 < 0.8:
+                                tokens[i: i + len(phrase_tokens)] = mask
+                            elif prob2 < 0.9:
+                                for j in range(i, i + len(phrase_tokens)):
+                                    tokens[j] = random.choice(token_range)
+                            break
 
-                    # 80% randomly change token to mask token
-                    if prob < 0.8:
-                        tokens[i] = mask
-
-                    # 10% randomly change token to random token
-                    elif prob < 0.9:
-                        tokens[i] = random.choice(token_range)
-
-                    # -> rest 10% randomly keep current token
-
-                    # append current token to output (we will predict these later)
-                    labels.append(token)
-                else:
-                    # no masking token (will be ignored by loss function later)
-                    labels.append(0)
-            else:
-                labels.append(0)
-        
         if all(l == 0 for l in labels):
             # at least mask 1
             labels[1] = tokens[1]
             tokens[1] = mask
-
         return torch.tensor(tokens), torch.tensor(labels)
+
+        

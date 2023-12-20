@@ -2,8 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# replace cosine similarity with Canonical Correlation Analysis ❌
+# keep t2i single way
+# cosine cross-entropy == KL https://blog.csdn.net/zhaojc1995/article/details/104332533
 
-def compute_sdm(image_fetures, text_fetures, pid, logit_scale, image_id=None, factor=0.3, epsilon=1e-8):
+def compute_sdm(image_fetures, text_fetures, pid, logit_scale, image_id=None, factor=0.3, epsilon=1e-8, simple_cross_entropy=False):
     """
     Similarity Distribution Matching
     """
@@ -31,21 +34,39 @@ def compute_sdm(image_fetures, text_fetures, pid, logit_scale, image_id=None, fa
 
     # normalize the true matching distribution
     labels_distribute = labels / labels.sum(dim=1)
-
     i2t_pred = F.softmax(image_proj_text, dim=1)
-    i2t_loss = i2t_pred * (F.log_softmax(image_proj_text, dim=1) - torch.log(labels_distribute + epsilon))
     t2i_pred = F.softmax(text_proj_image, dim=1)
-    t2i_loss = t2i_pred * (F.log_softmax(text_proj_image, dim=1) - torch.log(labels_distribute + epsilon))
+    if simple_cross_entropy:
+        i2t_loss = i2t_pred * (-torch.log(labels_distribute + epsilon))
+        t2i_loss = t2i_pred * (-torch.log(labels_distribute + epsilon))
+    else:
+        i2t_loss = i2t_pred * (F.log_softmax(image_proj_text, dim=1) - torch.log(labels_distribute + epsilon))
+        t2i_loss = t2i_pred * (F.log_softmax(text_proj_image, dim=1) - torch.log(labels_distribute + epsilon))
 
     loss = torch.mean(torch.sum(i2t_loss, dim=1)) + torch.mean(torch.sum(t2i_loss, dim=1))
 
     return loss
 
+def compute_ssdm(image_fetures, text_fetures, pid, logit_scale):
+    batch_size = image_fetures.shape[0]
+    image_norm = image_fetures / image_fetures.norm(dim=1, keepdim=True)
+    text_norm = text_fetures / text_fetures.norm(dim=1, keepdim=True)
 
+    t2i_cosine_theta = text_norm @ image_norm.t()
+    i2t_cosine_theta = t2i_cosine_theta.t()
+
+    text_proj_image = logit_scale * t2i_cosine_theta
+    image_proj_text = logit_scale * i2t_cosine_theta
+
+    i2t_pred = F.softmax(image_proj_text, dim=1)
+    t2i_pred = F.softmax(text_proj_image, dim=1)
+
+    loss = torch.mean(torch.sum(torch.square(i2t_pred - t2i_pred)))
+
+    return loss
 def compute_mlm(scores, labels):
     ce = nn.CrossEntropyLoss(ignore_index=0)
     return ce(scores, labels)
-
 
 def compute_itc(image_features, text_features, logit_scale):
     """
